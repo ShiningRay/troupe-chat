@@ -1,0 +1,5 @@
+name: protocol
+version: 0.1.0
+crystal: ">= 1.22"
+description: TroupeChat 客户端与服务端共享的 WebSocket 消息协议（纯 Crystal，零依赖）
+license: MIT

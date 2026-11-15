@@ -1,0 +1,7 @@
+lib/
+bin/
+.crystal/
+*.db
+*.db-wal
+*.db-shm
+/tmp/

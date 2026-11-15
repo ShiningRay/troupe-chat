@@ -1,0 +1,14 @@
+name: chat_client
+version: 0.1.0
+crystal: ">= 1.22"
+description: TroupeChat 客户端 —— tessell 自绘 GUI + WebSocket
+license: MIT
+dependencies:
+  tessell:
+    github: ShiningRay/tessell
+    version: ">= 0.4.1"
+  protocol:
+    path: ../protocol
+targets:
+  chat_client:
+    main: src/client.cr
