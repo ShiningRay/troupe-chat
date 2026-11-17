@@ -1,0 +1,8 @@
+.bundle/
+vendor/
+*.db
+*.db-wal
+*.db-shm
+chat.db*
+smoke*.db*
+/.troupe/

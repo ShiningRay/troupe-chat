@@ -1,0 +1,26 @@
+{
+  "name": "troupe-chat-js",
+  "version": "0.1.0",
+  "description": "TroupeChat 服务端（TypeScript）——troupejs Virtual Actor 框架实现，WebSocket 协议与 troupe-chat（Crystal）一致",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "tsx server/src/main.ts",
+    "start": "tsx server/src/main.ts"
+  },
+  "dependencies": {
+    "troupe": "file:../../troupejs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

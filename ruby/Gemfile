@@ -1,0 +1,14 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+# Troupe.rb：path 依赖本地 trouperb 仓（与 troupe-chat 的 shards path 依赖同构）
+gem "troupe", path: "../../trouperb"
+
+# -d chat.db 的 SQLite PropStore 适配器（lazy require，仅该模式需要）
+gem "sqlite3", "~> 2.0"
+
+group :test do
+  gem "minitest", "~> 5.0"
+  gem "rake", "~> 13.0"
+end
