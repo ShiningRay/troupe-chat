@@ -4,7 +4,7 @@ TroupeChat 服务端 monorepo 的 **Node.js/TypeScript 实现**：WebSocket 线�
 [crystal/](../crystal)（首个参照实现）**完全一致**（TroupeChat WebSocket 协议 v1），
 [tessell-chat](https://github.com/ShiningRay/tessell-chat) 客户端无需修改即可连接。
 
-- **运行时**：[troupejs](https://github.com/ShiningRay/troupejs) Virtual Actor 框架
+- **运行时**：[troupejs](https://github.com/ShiningRay/troupe-js) Virtual Actor 框架
   （`file:` path 依赖本地仓库，与 crystal 版的 shards path 依赖同构）——每个房间一个
   `RoomActor`（成员/最近消息为 Props，SQLite WAL 持久化；发言以客户端 `cid` 作幂等键）；
 - **网关**：自带零依赖 RFC 6455 WebSocket 服务端 + 应用协议路由；

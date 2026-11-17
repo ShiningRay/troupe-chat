@@ -10,9 +10,9 @@
 
 | 目录 | 语言 | 运行时 | 状态 | 测试 |
 |---|---|---|---|---|
-| [crystal/](crystal/) | Crystal | [troupe.cr](https://github.com/ShiningRay/troupe.cr) + troupe-gateway | ✅ 完整（首个参照实现） | 14 spec |
-| [ruby/](ruby/) | Ruby | [trouperb](https://github.com/ShiningRay/trouperb) | ✅ 完整 | 25 test + 2 smoke |
-| [js/](js/) | TypeScript | [troupejs](https://github.com/ShiningRay/troupejs) | ✅ 完整 | 24 vitest |
+| [crystal/](crystal/) | Crystal | [troupe.cr](https://github.com/ShiningRay/troupe-cr) + troupe-gateway | ✅ 完整（首个参照实现） | 14 spec |
+| [ruby/](ruby/) | Ruby | [trouperb](https://github.com/ShiningRay/troupe-rb) | ✅ 完整 | 25 test + 2 smoke |
+| [js/](js/) | TypeScript | [troupejs](https://github.com/ShiningRay/troupe-js) | ✅ 完整 | 24 vitest |
 | [elixir/](elixir/) | Elixir | [troupe-elixir](https://github.com/ShiningRay/troupe-elixir) | 🚧 占位（实现待排期） | — |
 
 各实现语义逐条对齐（见各目录 README 的「与 Crystal 版差异」节）：
