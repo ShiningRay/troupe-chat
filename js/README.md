@@ -1,14 +1,14 @@
-# TroupeChat 服务端（troupejs / TypeScript）
+# TroupeChat 服务端（troupe-js / TypeScript）
 
 TroupeChat 服务端 monorepo 的 **Node.js/TypeScript 实现**：WebSocket 线上协议与
 [crystal/](../crystal)（首个参照实现）**完全一致**（TroupeChat WebSocket 协议 v1），
 [tessell-chat](https://github.com/ShiningRay/tessell-chat) 客户端无需修改即可连接。
 
-- **运行时**：[troupejs](https://github.com/ShiningRay/troupe-js) Virtual Actor 框架
+- **运行时**：[troupe-js](https://github.com/ShiningRay/troupe-js) Virtual Actor 框架
   （`file:` path 依赖本地仓库，与 crystal 版的 shards path 依赖同构）——每个房间一个
   `RoomActor`（成员/最近消息为 Props，SQLite WAL 持久化；发言以客户端 `cid` 作幂等键）；
-- **网关**：自带零依赖 RFC 6455 WebSocket 服务端 + 应用协议路由；
-  房间广播经 troupejs **Show** 话题（`chat:<room>`）接出，turn 串行 ⇒ 广播顺序
+- **网关**：[`troupe-gateway-js`](https://github.com/ShiningRay/troupe-gateway-js) 伴生包（会话生命周期/有界 mailbox/Outbox 派发循环/event_id 去重）+ 应用协议路由；
+  房间广播经 troupe-js **Show** 话题（`chat:<room>`）接出，turn 串行 ⇒ 广播顺序
   与 Turn 提交顺序严格一致（对照 crystal 版的 Outbox 同序投递）。
 
 协议见 [docs/protocol.md](../docs/protocol.md)。
@@ -18,16 +18,16 @@ TroupeChat 服务端 monorepo 的 **Node.js/TypeScript 实现**：WebSocket 线�
 ```
 js/
 ├── protocol/   # 消息编解码（纯 TS，零依赖；与 crystal protocol/ 逐条对齐）
-├── server/     # RoomActor（troupejs Actor）+ WebSocket 网关 + 入口
+├── server/     # RoomActor（troupe-js Actor）+ WebSocket 网关 + 入口
 └── scripts/    # smoke.mjs（实连冒烟探针）
 ```
 
 ## 运行
 
-环境：Node >= 22.13。依赖本地 troupejs 仓库（先确保其 `dist/` 已构建）：
+环境：Node >= 22.13。依赖本地 troupe-js 仓库（先确保其 `dist/` 已构建）：
 
 ```sh
-cd ../../troupejs && npm run build   # 首次/更新 troupejs 后
+cd ../../troupejs && npm run build   # 首次/更新 troupe-js 后
 cd ../../troupe-chat/js && npm install
 
 # 1) 服务端（默认 7777 端口，SQLite 持久化到 chat.db）
@@ -55,15 +55,15 @@ npm run typecheck # tsc --noEmit
 ping/pong、主动 leave 无回包、晚加入者历史/last_id、坏 JSON → bad_request、
 ack 先于本人回声（对齐 Outbox「提交后再送」时序）。
 
-## 架构要点（troupejs 的用武之地）
+## 架构要点（troupe-js 的用武之地）
 
-| 诉求 | troupejs 机制 |
+| 诉求 | troupe-js 机制 |
 |---|---|
 | 房间 = 有状态实体 | Virtual Actor：`troupe.cast(RoomActor, 房间名)`，按需激活 |
 | 消息顺序 | 每房间 strict Turn 串行；广播经 Show 话题，turn 内发布 ⇒ 与提交顺序严格一致 |
 | 不丢不重 | `say.cid` 幂等键（`this.idempotent` 重放首次结果；同键不同指纹拒绝）；客户端按消息 `id` 去重 |
 | 重启恢复 | Props（成员/最近 200 条消息）随 `saveProps()` 原子落 SQLite（WAL），重开即回放 |
-| 可观测 | troupejs Booth 内省面板（`-m` 端口）：Actor 状态机/revision/事件流 |
+| 可观测 | troupe-js Booth 内省面板（`-m` 端口）：Actor 状态机/revision/事件流 |
 | 慢消费者隔离 | 每连接出站邮箱有界（256 帧），溢出剔除该连接，不阻塞其他订阅者 |
 
 网关（[server/src/gateway.ts](server/src/gateway.ts)）是唯一粘合层：WebSocket 会话 ⇄
@@ -80,7 +80,7 @@ typed Agent 调用；Show 事件回拨 → `setImmediate` 投递（模拟 Outbox
   崩溃重放语义更强。
 - **慢消费者剔除**：有界出站邮箱（256 帧）+ 溢出断开；无 crystal 版的 200ms 单次
   投递限时。
-- **`-m`**：troupejs Booth 内省面板（对照 crystal 版 Director `/health /metrics`）。
+- **`-m`**：troupe-js Booth 内省面板（对照 crystal 版 Director `/health /metrics`）。
 - 已知限制同 crystal 版：单进程、单节点；客户端断线不自动重连。
 
 ### 自动化验证（无人工交互）

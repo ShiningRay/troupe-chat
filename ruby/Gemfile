@@ -5,6 +5,9 @@ source "https://rubygems.org"
 # Troupe.rb：path 依赖本地 trouperb 仓（与 troupe-chat 的 shards path 依赖同构）
 gem "troupe", path: "../../trouperb"
 
+# troupe-gateway：ADR-0007 L3 传输桥（会话/有界 mailbox/Outbox 派发循环/去重）
+gem "troupe-gateway", path: "../../troupe-gateway-rb"
+
 # -d chat.db 的 SQLite PropStore 适配器（lazy require，仅该模式需要）
 gem "sqlite3", "~> 2.0"
 

@@ -15,7 +15,8 @@
     "start": "tsx server/src/main.ts"
   },
   "dependencies": {
-    "troupe": "file:../../troupejs"
+    "troupe": "file:../../troupejs",
+    "troupe-gateway": "file:../../troupe-gateway-js"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",

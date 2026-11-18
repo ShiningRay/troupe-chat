@@ -1,20 +1,21 @@
 /**
- * Chat 网关：WebSocket 会话 ⇄ RoomActor typed Agent 调用的应用协议路由。
+ * Chat 网关：troupe-gateway（ADR-0007 L3 传输桥）之上的**应用协议路由**。
  *
- * 与 Crystal 版 troupe-chat/server/src/chat/gateway.cr 逐条对齐：
- * - 上行路由：join/say/leave/ping → RoomActor 调用（troupe.cast 代理）；
+ * 传输管理（会话生命周期、有界 mailbox + 限时入队、溢出策略、Outbox 派发循环、
+ * event_id 去重）全部由 troupe-gateway 承担（与 crystal 版 troupe-gateway shard 分层
+ * 一致）；本层只剩 chat 业务语义：
+ * - 上行路由：join/say/leave/ping → RoomActor typed Agent 调用；
  * - 房间成员表（conn 集合）与 presence 自回声抑制；
- * - 断线兜底补 leave；慢消费者有界出站邮箱（256）溢出剔除；
- * - 房间事件经 troupe Show 话题订阅（`chat:<room>`）接出。
+ * - 断线兜底补 leave；慢消费者/死会话惰性清理（deliver 失败即移出房间集合）；
+ * - Show 事件 → Outbox 源（ShowOutboxSource 桥：append 时刻快照投递目标）→ 网关派发循环。
  *
  * 时序要点：先把连接挂进房间集合、订阅话题，再调用 join turn，保证 turn 提交后
- * 产生的第一波事件不会因注册晚于投递而丢失；Show 回调经 setImmediate 投递，
- * 模拟 Crystal Outbox 轮询的「提交后再送」——ack 先于本人 chat 回声，且每房间 FIFO 保序。
+ * 产生的第一波事件不会因注册晚于投递而丢失；事件经 Outbox 派发循环（默认 50ms
+ * claim，InMemory 源 FIFO + 单 worker 顺序回调）投递——ack 先于本人 chat 回声、
+ * 每房间保序，与 crystal 版 Outbox 轮询同构。
  */
-import { randomUUID } from "node:crypto";
-import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
 import { IdempotencyConflictError, type Troupe } from "troupe";
+import { WebSocketGateway, type OutboxRecord, type Session } from "troupe-gateway";
 import {
   ChatParseError,
   ack,
@@ -25,68 +26,39 @@ import {
   type WireMsg,
 } from "../../protocol/src/messages.js";
 import { NickTakenError, RoomActor } from "./room-actor.js";
-import { attachWebSocket, type WsConnection } from "./ws.js";
+import { ShowOutboxSource } from "./show-outbox.js";
 
-/** 每连接出站邮箱上限（对齐 troupe-gateway 有界 mailbox；溢出剔除该连接） */
-const MAX_MAILBOX = 256;
-
-interface Session {
-  id: string;
-  ws: WsConnection;
-  meta: { nick?: string; room?: string };
-  /** 出站在途帧数（write 回调记账） */
-  pending: number;
-}
+const ROOM_TOPIC_PREFIX = "chat:";
 
 export class ChatGateway {
-  private readonly sessions = new Map<string, Session>();
   private readonly roomConns = new Map<string, Set<string>>();
-  private readonly subscribedRooms = new Set<string>();
-  private server: Server | null = null;
+  private readonly outbox: ShowOutboxSource;
+  private readonly ws: WebSocketGateway;
 
-  constructor(private readonly troupe: Troupe) {}
+  constructor(private readonly troupe: Troupe) {
+    this.outbox = new ShowOutboxSource(troupe, (room) => [...(this.roomConns.get(room) ?? [])]);
+    this.ws = new WebSocketGateway(this.outbox);
+    this.ws.onMessage = (session, raw) => void this.handleRaw(session, raw);
+    this.ws.onDisconnect = (session) => this.cleanup(session);
+    this.ws.onOutbox = (record) => void this.routeEvent(record);
+  }
 
   /** 监听并返回实际端口（port=0 时随机分配，测试用） */
   async listen(host: string, port: number): Promise<number> {
-    const server = createServer((req, res) => {
-      // 非 WebSocket 请求兜底（对应 Crystal 侧 FallbackHandler）
-      res.writeHead(426, { "content-type": "text/plain; charset=utf-8" });
-      res.end("TroupeChat WebSocket server：请用 WebSocket 连接（协议见 troupe-chat/docs/protocol.md）\n");
-    });
-    attachWebSocket(server, { onConnection: (ws) => this.onConnection(ws) });
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(port, host, () => resolve());
-    });
-    this.server = server;
-    return (server.address() as AddressInfo).port;
+    this.ws.track("chat"); // 启动 Outbox 派发循环（claim 型源：tracked 非空即轮询）
+    return this.ws.listen(host, port);
   }
 
   async stop(): Promise<void> {
-    for (const s of this.sessions.values()) s.ws.destroy();
-    this.sessions.clear();
-    const server = this.server;
-    this.server = null;
-    if (!server) return;
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    this.ws.stop();
   }
 
   // ---- 连接生命周期 ----
 
-  private onConnection(ws: WsConnection): void {
-    const session: Session = { id: randomUUID(), ws, meta: {}, pending: 0 };
-    this.sessions.set(session.id, session);
-    ws.bind(
-      (raw) => void this.handleRaw(session, raw),
-      () => this.cleanup(session),
-    );
-  }
-
   /** 断线清理：actor 侧补 leave（真实 conn），房间集合移除。 */
   private cleanup(session: Session): void {
-    this.sessions.delete(session.id);
-    const room = session.meta.room;
-    const nick = session.meta.nick;
+    const room = session.meta.get("room");
+    const nick = session.meta.get("nick");
     if (!room || !nick) return;
     this.roomConns.get(room)?.delete(session.id);
     const agent = this.troupe.cast(RoomActor, room);
@@ -101,7 +73,7 @@ export class ChatGateway {
     try {
       const parsed = parseClient(JSON.parse(raw));
       if (parsed === "ping") {
-        this.deliver(session, pong());
+        await this.deliver(session, pong());
         return;
       }
       if (parsed === "leave") {
@@ -116,10 +88,10 @@ export class ChatGateway {
     } catch (e) {
       // 坏 JSON / 协议结构非法 → bad_request（对齐 Crystal ParseError | JSON::ParseException）
       if (e instanceof ChatParseError || e instanceof SyntaxError) {
-        this.deliver(session, error("bad_request", errorMessage(e) || "bad request"));
+        await this.deliver(session, error("bad_request", errorMessage(e) || "bad request"));
         return;
       }
-      this.deliver(session, error("internal", errorMessage(e) || "internal error"));
+      await this.deliver(session, error("internal", errorMessage(e) || "internal error"));
     }
   }
 
@@ -132,105 +104,91 @@ export class ChatGateway {
     }
     conns.add(session.id);
     try {
-      await this.ensureSubscribed(room);
+      this.ensureSubscribed(room);
       const agent = this.troupe.cast(RoomActor, room);
       const welcomeMsg = await agent.join(nick, session.id);
-      session.meta.nick = nick;
-      session.meta.room = room;
-      this.deliver(session, welcomeMsg);
+      session.meta.set("nick", nick);
+      session.meta.set("room", room);
+      await this.deliver(session, welcomeMsg);
     } catch (e) {
       conns.delete(session.id);
       if (isName(e, NickTakenError)) {
-        this.deliver(session, error("nick_taken", errorMessage(e) || "nick taken"));
+        await this.deliver(session, error("nick_taken", errorMessage(e) || "nick taken"));
       } else {
-        this.deliver(session, error("join_failed", errorMessage(e) || "join failed"));
+        await this.deliver(session, error("join_failed", errorMessage(e) || "join failed"));
       }
     }
   }
 
   private async handleSay(session: Session, text: string, cid: string): Promise<void> {
-    const room = session.meta.room;
+    const room = session.meta.get("room");
     if (!room) {
-      this.deliver(session, error("no_room", "尚未加入房间"));
+      await this.deliver(session, error("no_room", "尚未加入房间"));
       return;
     }
     const agent = this.troupe.cast(RoomActor, room);
     try {
-      const msg = await agent.post(session.meta.nick ?? "", text, cid);
-      this.deliver(session, ack(cid, msg.id));
+      const msg = await agent.post(session.meta.get("nick") ?? "", text, cid);
+      await this.deliver(session, ack(cid, msg.id));
     } catch (e) {
       if (isName(e, IdempotencyConflictError)) {
-        this.deliver(session, error("id_conflict", errorMessage(e) || "cid 冲突"));
+        await this.deliver(session, error("id_conflict", errorMessage(e) || "cid 冲突"));
       } else {
-        this.deliver(session, error("say_failed", errorMessage(e) || "say failed"));
+        await this.deliver(session, error("say_failed", errorMessage(e) || "say failed"));
       }
     }
   }
 
   private async handleLeave(session: Session): Promise<void> {
-    const room = session.meta.room;
-    const nick = session.meta.nick ?? "";
+    const room = session.meta.get("room");
+    const nick = session.meta.get("nick") ?? "";
     if (!room) {
       // 对齐 Crystal：未加入房间的 leave 回发空房间 left 帧
-      this.deliver(session, left("", nick, []));
+      await this.deliver(session, left("", nick, []));
       return;
     }
     const agent = this.troupe.cast(RoomActor, room);
     try {
       await agent.leave(nick, session.id);
       this.roomConns.get(room)?.delete(session.id);
-      session.meta.room = "";
+      session.meta.set("room", "");
     } catch (e) {
-      this.deliver(session, error("leave_failed", errorMessage(e) || "leave failed"));
+      await this.deliver(session, error("leave_failed", errorMessage(e) || "leave failed"));
     }
   }
 
-  // ---- 出站投递（有界邮箱 + 慢消费者剔除） ----
+  // ---- 出站投递（有界 mailbox/限时入队/溢出策略由 troupe-gateway 执行） ----
 
-  /** 投递一帧；邮箱溢出/连接已死时剔除连接并返回 false。 */
-  private deliver(session: Session, msg: WireMsg): boolean {
-    if (session.ws.closed) return false;
-    if (session.pending >= MAX_MAILBOX) {
-      session.ws.destroy(); // 触发 close → cleanup → 断线兜底 leave
-      return false;
-    }
-    session.pending++;
-    try {
-      session.ws.sendText(JSON.stringify(msg), () => {
-        session.pending--;
-      });
-    } catch {
-      session.ws.destroy();
-      return false;
-    }
-    return true;
+  private async deliver(session: Session, msg: WireMsg): Promise<boolean> {
+    return this.ws.deliver(session, msg);
   }
 
-  // ---- 房间事件路由（troupe Show 订阅） ----
+  // ---- 房间事件路由（Show → Outbox 源 → 网关派发循环） ----
 
-  private async ensureSubscribed(room: string): Promise<void> {
-    if (this.subscribedRooms.has(room)) return;
-    this.subscribedRooms.add(room); // 同步登记防并发重复订阅；Set 去重本就幂等
-    await this.troupe.subscribe(`chat:${room}`, (event) => {
-      // 模拟 Outbox 轮询异步性：提交后投递，FIFO 保序
-      setImmediate(() => this.routeEvent(room, event as WireMsg));
-    });
+  /** 懒订阅房间话题：Show 回调（turn 提交时刻）append 进 Outbox 源，派发循环 claim 后路由。 */
+  private ensureSubscribed(room: string): void {
+    this.outbox.subscribeRoom(room, ROOM_TOPIC_PREFIX + room);
   }
 
-  private routeEvent(room: string, event: WireMsg): void {
-    const kind = event.type;
+  /** 网关派发循环回调：按 append 时刻的目标快照分发（event_id 去重已在 gateway 内完成）。 */
+  private async routeEvent(record: OutboxRecord): Promise<void> {
+    const room = record.topic.startsWith(ROOM_TOPIC_PREFIX)
+      ? record.topic.slice(ROOM_TOPIC_PREFIX.length)
+      : record.topic;
+    const event = record.payload as WireMsg;
+    const kind = event?.type;
     const presenceNick = kind === "joined" || kind === "left" ? event.nick : null;
-    const conns = [...(this.roomConns.get(room) ?? [])];
-    for (const conn of conns) {
-      const session = this.sessions.get(conn);
-      if (!session || session.ws.closed) {
+    for (const conn of this.outbox.targetsOf(record)) {
+      const session = this.ws.session(conn);
+      if (!session || session.closedMailbox) {
         // 死会话惰性清理
         this.roomConns.get(room)?.delete(conn);
         continue;
       }
       // presence 自回声抑制：自己的 joined/left 不回发（welcome/退出已覆盖）。
-      if (presenceNick && session.meta.nick === presenceNick) continue;
-      if (!this.deliver(session, event)) {
+      if (presenceNick && session.meta.get("nick") === presenceNick) continue;
+      // 慢消费者/死会话惰性清理：deliver 失败（溢出/已关）即移出房间集合。
+      if (!(await this.deliver(session, event))) {
         this.roomConns.get(room)?.delete(conn);
       }
     }

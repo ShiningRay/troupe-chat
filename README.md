@@ -10,9 +10,9 @@
 
 | 目录 | 语言 | 运行时 | 状态 | 测试 |
 |---|---|---|---|---|
-| [crystal/](crystal/) | Crystal | [troupe.cr](https://github.com/ShiningRay/troupe-cr) + troupe-gateway | ✅ 完整（首个参照实现） | 14 spec |
-| [ruby/](ruby/) | Ruby | [trouperb](https://github.com/ShiningRay/troupe-rb) | ✅ 完整 | 25 test + 2 smoke |
-| [js/](js/) | TypeScript | [troupejs](https://github.com/ShiningRay/troupe-js) | ✅ 完整 | 24 vitest |
+| [crystal/](crystal/) | Crystal | [troupe-cr](https://github.com/ShiningRay/troupe-cr) + troupe-gateway | ✅ 完整（首个参照实现） | 14 spec |
+| [ruby/](ruby/) | Ruby | [troupe-rb](https://github.com/ShiningRay/troupe-rb) | ✅ 完整 | 25 test + 2 smoke |
+| [js/](js/) | TypeScript | [troupe-js](https://github.com/ShiningRay/troupe-js) | ✅ 完整 | 24 vitest |
 | [elixir/](elixir/) | Elixir | [troupe-elixir](https://github.com/ShiningRay/troupe-elixir) | 🚧 占位（实现待排期） | — |
 
 各实现语义逐条对齐（见各目录 README 的「与 Crystal 版差异」节）：
@@ -22,6 +22,11 @@
 - 发言以客户端 `cid` 作幂等键：网络重发不重复入库/广播，同键不同参数拒绝（`id_conflict`）；
 - 广播与 Turn 提交同序；`ack` 先于本人 `chat` 回声；presence 不回发本人；
 - 断线服务端兜底补 `leave`；慢消费者有界出站邮箱剔除。
+- 传输层统一接入对应语言的 [`troupe-gateway`](https://github.com/ShiningRay/troupe-gateway) 伴生库
+  （crystal shard / [troupe-gateway-rb](https://github.com/ShiningRay/troupe-gateway-rb) /
+  [troupe-gateway-js](https://github.com/ShiningRay/troupe-gateway-js)；elixir 版规划用
+  [troupe-gateway-elixir](https://github.com/ShiningRay/troupe-gateway-elixir)）——传输管理下沉伴生库，
+  应用层只剩协议路由。
 
 ## 统一验收探针
 

@@ -17,10 +17,10 @@ shards:
     version: 0.24.0
 
   troupe:
-    git: https://github.com/shiningray/troupe.cr.git
-    version: 0.22.0-dev.0+git.commit.fd51c5a095f99a32c3f85fc6458be5900caf3fb7
+    git: https://github.com/shiningray/troupe-cr.git
+    version: 0.22.0-dev.0+git.commit.4b6840789459dc9327698731e2aba85f41b59a08
 
   troupe-gateway:
     git: https://github.com/shiningray/troupe-gateway.git
-    version: 0.1.1
+    version: 0.1.3
 
