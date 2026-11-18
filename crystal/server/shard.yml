@@ -4,12 +4,12 @@ crystal: ">= 1.22"
 description: TroupeChat 服务端 —— troupe-cr Virtual Actor 房间 + troupe-gateway WebSocket 网关
 license: MIT
 dependencies:
+  troupe-gateway:
+    github: ShiningRay/troupe-gateway
+    branch: main
   troupe:
     github: ShiningRay/troupe-cr
     branch: main
-  troupe-gateway:
-    github: ShiningRay/troupe-gateway
-    version: ">= 0.1.0"
   protocol:
     path: ../protocol
 targets:

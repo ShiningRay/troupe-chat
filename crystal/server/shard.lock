@@ -22,5 +22,5 @@ shards:
 
   troupe-gateway:
     git: https://github.com/shiningray/troupe-gateway.git
-    version: 0.1.3
+    version: 0.1.3+git.commit.1e40ae80df0f866bb630c80e3b2d86b3e96a5cbf
 
