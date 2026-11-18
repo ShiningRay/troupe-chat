@@ -13,6 +13,7 @@
 | [crystal/](crystal/) | Crystal | [troupe-cr](https://github.com/ShiningRay/troupe-cr) + troupe-gateway | ✅ 完整（首个参照实现） | 14 spec |
 | [ruby/](ruby/) | Ruby | [troupe-rb](https://github.com/ShiningRay/troupe-rb) | ✅ 完整 | 25 test + 2 smoke |
 | [js/](js/) | TypeScript | [troupe-js](https://github.com/ShiningRay/troupe-js) | ✅ 完整 | 24 vitest |
+| [go/](go/) | Go | [troupe-go](https://github.com/ShiningRay/troupe-go) | ✅ 完整 | go test -race 25 |
 | [elixir/](elixir/) | Elixir | [troupe-elixir](https://github.com/ShiningRay/troupe-elixir) | 🚧 占位（实现待排期） | — |
 
 各实现语义逐条对齐（见各目录 README 的「与 Crystal 版差异」节）：
@@ -46,6 +47,7 @@ crystal run src/client.cr -- --autotest --send "hello" --nick alice --frames=150
 cd crystal/server && shards install && crystal spec        # 14 例（语义 + 网关端到端）
 cd ruby && bundle install && rake                          # 25 例 + ruby smoke_e2e.rb
 cd js && npm install && npm test                           # 24 例（协议 + 语义 + e2e）
+cd go && go test -race ./...                               # 25 例（协议 + 语义 + Outbox + e2e）
 ```
 
 ## 结构
@@ -56,6 +58,7 @@ troupe-chat/
 ├── crystal/           # protocol/（共享编解码 shard）+ server/（chat_server）
 ├── ruby/              # protocol/ + server/ + smoke 脚本
 ├── js/                # protocol/ + server/ + smoke 脚本
+├── go/                # protocol/ + server/（chat 包 + cmd）
 └── elixir/            # 占位：目录约定与实现清单
 ```
 

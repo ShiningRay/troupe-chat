@@ -1,0 +1,6 @@
+*.exe
+*.db
+*.db-wal
+*.db-shm
+chat_client
+chat_server
